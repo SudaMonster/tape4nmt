@@ -1,0 +1,161 @@
+global {
+
+  # GLOBAL/PREPROCESSING CONFIGURATIONS
+  working_dir="/export/b18/shuoyangd/projects/fairseq-test/exps"
+
+  SRC=so
+  TRG=en
+  trg_lang=en
+  Ratio=1
+  MaxLen=80
+
+
+  njobs=50
+  submitter="sge"
+  resource_flags="-l 'mem_free=2g,ram_free=2g'"
+  action_flags="-m ae -M xutai_ma@jhu.edu"
+  #pyenv="/home/shuoyangd/pyenv/py3t4/bin/activate"
+  conda_env="mxnet_v1.2.1"
+
+  train_data=(DataSource:
+    so_en=(side:
+      src="/home/pkoehn/experiment/material-so-en/training/corpus.1.so"
+      trg="/home/pkoehn/experiment/material-so-en/training/corpus.1.en"
+    )
+    de_en=(side:
+      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainSampleSize.500000/out"
+      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainSampleSize.500000+side.trg/out"
+    )
+    es_en=(side:
+      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.es_en+TrainSampleSize.500000/out"
+      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.es_en+TrainSampleSize.500000+side.trg/out"
+    )
+    fr_en=(side:
+      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.fr_en+TrainSampleSize.500000/out"
+      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.fr_en+TrainSampleSize.500000+side.trg/out"
+    )
+    it_en=(side:
+      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.it_en+TrainSampleSize.500000/out"
+      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.it_en+TrainSampleSize.500000+side.trg/out"
+    )
+    ro_en=(side:
+      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.ro_en+TrainSampleSize.500000/out"
+      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.ro_en+TrainSampleSize.500000+side.trg/out"
+    )
+  )
+
+  dev_data=(DataSource:
+    so_en=(side:
+      src="/home/pkoehn/experiment/material-so-en/tuning/input.tc.1"
+      trg="/home/pkoehn/experiment/material-so-en/tuning/reference.tc.1"
+    )
+    de_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-deen-src.de.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-deen-ref.en.sgm"
+    )
+    es_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2012-src.es.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2012-ref.en.sgm"
+    )
+    fr_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-src.fr.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-ref.en.sgm"
+    )
+    it_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newssyscomb2009-src.it.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newssyscomb2009-ref.en.sgm"
+    )
+    ro_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newsdev2016-roen-src.ro.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newsdev2016-roen-ref.en.sgm"
+    )
+  )
+
+  test_data=(DataSource:
+    so_en=(side:
+      src="/home/pkoehn/experiment/material-so-en/evaluation/analysis.input.tc.1"
+      trg="/home/pkoehn/experiment/material-so-en/evaluation/analysis.reference.tok.1"
+    )
+    de_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2018/dev/newstest2017-deen-src.de.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2018/dev/newstest2017-deen-ref.en.sgm"
+    )
+    es_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-src.es.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-ref.en.sgm"
+    )
+    fr_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2014-fren-src.fr.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2014-fren-ref.en.sgm"
+    )
+    it_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2009-src.it.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2009-ref.en.sgm"
+    )
+    ro_en=(side:
+      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-roen-src.ro.sgm"
+      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-roen-ref.en.sgm"
+    )
+  )
+
+  src_truecaser=(UseExistingTruecaser:
+    yes=""
+    no=$out@train_truecaser
+  )
+  trg_truecaser=(UseExistingTruecaser:
+    yes=""
+    no=$out@train_truecaser
+  )
+
+  tokenized_trg=(DoTokenize:
+    yes=$out@trg_tokenize
+    no=$out@aggregate[side:trg]
+  )
+
+  bpe_input=(DoTokenizeAndTruecase:
+    yes=$out@truecase
+    no=$out@aggregate
+  )
+
+  sgm_dev=""
+  sgm_test=""
+
+  multi_bleu="true"
+  nist_bleu="true"
+  
+  bpe_operations=(NumberOfBPE: 2000 5000 10000 20000 40000)
+
+  # TRAINING CONFIGURATIONS
+  # all default is consistent with nematus
+  train_train_from="" # if there is a previous model to start with
+  train_train_from_state_dict="" # if there is a previous dict to start with
+  train_start_epoch="" # if trained for certain amount of epochs previously
+
+  train_batch_size="80"
+  train_optim="adam"
+  train_dropout="0.1"
+  train_lr="0.0005"
+  train_lr_min="1e-09"
+  train_lr_shrink="0.5"
+  train_lr_scheduler="inverse_sqrt"
+  train_warmup_init_lr="1e-07"
+  train_warmup_updates="0"
+  # train_warmup_updates="4000"
+  train_criterion="label_smoothed_cross_entropy"
+  train_label_smoothing="0.1"
+  train_clip_norm=(ClipNorm: 0.0 0.1 0.5 1 5)
+  train_max_tokens="4000"
+  train_arch=(Architecture: conv="fconv" transformer="transformer" fconv_iwslt_de_en="fconv_iwslt_de_en" transformer_iwslt_de_en="transformer_iwslt_de_en")
+  train_share_all_embeddings="True"
+  train_adam_beta1="0.9"
+  train_adam_beta2="0.98"
+
+  # TEST CONFIGURATIONS
+  test_model_selection_strategy="acc"
+  test_max_sent_length="300"
+  test_beam_size="12"
+  test_batch_size="32"
+  test_replace_unk="True"
+  test_remove_bpe=""
+}
+
