@@ -3,9 +3,9 @@ global {
   # GLOBAL/PREPROCESSING CONFIGURATIONS
   working_dir="/export/b18/shuoyangd/projects/fairseq-test/exps"
 
-  SRC=so
-  TRG=en
-  trg_lang=en
+  src=so
+  tgt=en
+  tgt_lang=en
   Ratio=1
   MaxLen=80
 
@@ -17,99 +17,32 @@ global {
   #pyenv="/home/shuoyangd/pyenv/py3t4/bin/activate"
   conda_env="mxnet_v1.2.1"
 
-  train_data=(DataSource:
-    so_en=(side:
+  train_data=(side:
       src="/home/pkoehn/experiment/material-so-en/training/corpus.1.so"
-      trg="/home/pkoehn/experiment/material-so-en/training/corpus.1.en"
-    )
-    de_en=(side:
-      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainSampleSize.500000/out"
-      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainSampleSize.500000+side.trg/out"
-    )
-    es_en=(side:
-      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.es_en+TrainSampleSize.500000/out"
-      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.es_en+TrainSampleSize.500000+side.trg/out"
-    )
-    fr_en=(side:
-      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.fr_en+TrainSampleSize.500000/out"
-      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.fr_en+TrainSampleSize.500000+side.trg/out"
-    )
-    it_en=(side:
-      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.it_en+TrainSampleSize.500000/out"
-      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.it_en+TrainSampleSize.500000+side.trg/out"
-    )
-    ro_en=(side:
-      src="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.ro_en+TrainSampleSize.500000/out"
-      trg="/export/b18/shuoyangd/data/salesforce/train_sample/TrainDataSource.ro_en+TrainSampleSize.500000+side.trg/out"
-    )
-  )
+      tgt="/home/pkoehn/experiment/material-so-en/training/corpus.1.en"
+      )
 
-  dev_data=(DataSource:
-    so_en=(side:
+  dev_data=(side:
       src="/home/pkoehn/experiment/material-so-en/tuning/input.tc.1"
-      trg="/home/pkoehn/experiment/material-so-en/tuning/reference.tc.1"
+      tgt="/home/pkoehn/experiment/material-so-en/tuning/reference.tc.1"
     )
-    de_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-deen-src.de.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-deen-ref.en.sgm"
-    )
-    es_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2012-src.es.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2012-ref.en.sgm"
-    )
-    fr_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-src.fr.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-ref.en.sgm"
-    )
-    it_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newssyscomb2009-src.it.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newssyscomb2009-ref.en.sgm"
-    )
-    ro_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newsdev2016-roen-src.ro.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newsdev2016-roen-ref.en.sgm"
-    )
-  )
-
-  test_data=(DataSource:
-    so_en=(side:
+  test_data=(side:
       src="/home/pkoehn/experiment/material-so-en/evaluation/analysis.input.tc.1"
-      trg="/home/pkoehn/experiment/material-so-en/evaluation/analysis.reference.tok.1"
+      tgt="/home/pkoehn/experiment/material-so-en/evaluation/analysis.reference.tok.1"
     )
-    de_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2018/dev/newstest2017-deen-src.de.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2018/dev/newstest2017-deen-ref.en.sgm"
-    )
-    es_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-src.es.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2013-ref.en.sgm"
-    )
-    fr_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2014-fren-src.fr.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2014-fren-ref.en.sgm"
-    )
-    it_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2009-src.it.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2009-ref.en.sgm"
-    )
-    ro_en=(side:
-      src="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-roen-src.ro.sgm"
-      trg="/export/b18/shuoyangd/data/wmt2017/dev/newstest2016-roen-ref.en.sgm"
-    )
-  )
 
   src_truecaser=(UseExistingTruecaser:
     yes=""
     no=$out@train_truecaser
   )
-  trg_truecaser=(UseExistingTruecaser:
+  tgt_truecaser=(UseExistingTruecaser:
     yes=""
     no=$out@train_truecaser
   )
 
-  tokenized_trg=(DoTokenize:
-    yes=$out@trg_tokenize
-    no=$out@aggregate[side:trg]
+  tokenized_tgt=(DoTokenize:
+    yes=$out@tgt_tokenize
+    no=$out@aggregate[side:tgt]
   )
 
   bpe_input=(DoTokenizeAndTruecase:
