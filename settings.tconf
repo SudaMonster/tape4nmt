@@ -6,19 +6,21 @@ global {
   tgt=en
 
   # 0.1 data path
-  train_data=(side:
-      src="/home/pkoehn/experiment/material-so-en/training/corpus.1.so"
-      tgt="/home/pkoehn/experiment/material-so-en/training/corpus.1.en"
+  data=(section:
+    train=(side:
+        src="/home/pkoehn/experiment/material-so-en/training/corpus.1.so"
+        tgt="/home/pkoehn/experiment/material-so-en/training/corpus.1.en"
       )
-
-  dev_data=(side:
+    dev=(side:
       src="/home/pkoehn/experiment/material-so-en/tuning/input.tc.1"
       tgt="/home/pkoehn/experiment/material-so-en/tuning/reference.tc.1"
     )
-  test_data=(side:
+    test=(side:
       src="/home/pkoehn/experiment/material-so-en/evaluation/analysis.input.tc.1"
       tgt="/home/pkoehn/experiment/material-so-en/evaluation/analysis.reference.tok.1"
     )
+  )
+
   # 0.2 submitter info
   submitter="sge"
   cpu_resource_flags="-l 'mem_free=8g,ram_free=8g'"
@@ -31,13 +33,9 @@ global {
   # 1. preprocess
   # 1.1 bpe
   bpe_operations=(NumberOfBPE: 2000 5000 10000 20000 40000)
-  train_bpe_input=(RunTasksBeforeBPE:
+  bpe_input=(RunTasksBeforeBPE:
     yes=$out@truecase
-    no=$train_data
-  )
-  apply_bpe_input=(RunTasksBeforeBPE:
-    yes=$out@truecase
-    no=(Split: train=$train_data dev=$dev_data test=$test_data)
+    no=$data
   )
   # 1.2 clean
   clean_minlen=1

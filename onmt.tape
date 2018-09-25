@@ -15,7 +15,7 @@ package mosesdecoder :: .versioner=git .repo="https://github.com/moses-smt/moses
 
 # there seems to be a bug in branching, so this is necessary
 task tokenize : mosesdecoder
-  < in=(Split: train=$train_data dev=$dev_data test=$test_data)
+  < in=data
   > out
   :: lang=(side: src=$src tgt=$tgt)
   {
@@ -24,7 +24,7 @@ task tokenize : mosesdecoder
 
 
 task train_truecaser : mosesdecoder
-    < in=$out@tokenize[Split:train]
+    < in=$out@tokenize[section:train]
     > out
     {
       $mosesdecoder/scripts/recaser/train-truecaser.perl -corpus $in -model $out
@@ -41,7 +41,7 @@ task truecase : mosesdecoder
 
 
 task train_bpe : subword_nmt
-    < in=$train_bpe_input
+    < in=$bpe_input[section:train]
     > out
     :: bpe_operations=@
     {
@@ -50,7 +50,7 @@ task train_bpe : subword_nmt
 
 
 task apply_bpe : subword_nmt
-    < in=$apply_bpe_input
+    < in=$bpe_input
     < model=$out@train_bpe
     > out 
     {
@@ -58,8 +58,8 @@ task apply_bpe : subword_nmt
     }
 
 task clean_corpus : mosesdecoder
-    < train_src_in=$out@apply_bpe[Split:train,side:src]
-    < train_tgt_in=$out@apply_bpe[Split:train,side:tgt]
+    < train_src_in=$out@apply_bpe[section:train,side:src]
+    < train_tgt_in=$out@apply_bpe[section:train,side:tgt]
     > train_src_out
     > train_tgt_out
     :: src=@
@@ -78,10 +78,10 @@ task clean_corpus : mosesdecoder
 task binarize_data : onmt mosesdecoder
     < train_src_in=$train_src_out@clean_corpus
     < train_tgt_in=$train_tgt_out@clean_corpus
-    < dev_src_in=$out@apply_bpe[Split:dev,side:src]
-    < dev_tgt_in=$out@apply_bpe[Split:dev,side:tgt]
-    < test_src_in=$out@apply_bpe[Split:test,side:src]
-    < test_tgt_in=$out@apply_bpe[Split:test,side:tgt]
+    < dev_src_in=$out@apply_bpe[section:dev,side:src]
+    < dev_tgt_in=$out@apply_bpe[section:dev,side:tgt]
+    < test_src_in=$out@apply_bpe[section:test,side:src]
+    < test_tgt_in=$out@apply_bpe[section:test,side:tgt]
     > out
     :: python_env=@
     :: src=@
@@ -409,7 +409,7 @@ versioner git :: repo ref {
 }
 
 plan test {
-  reach train via (Split: *) * (side: *) * (NumberOfBPE: 2000) * (RunTasksBeforeBPE: no)
+  reach train via (section: *) * (side: *) * (NumberOfBPE: 2000) * (RunTasksBeforeBPE: no)
 }
 
 # Nuts and bolts:
