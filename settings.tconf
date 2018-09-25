@@ -89,5 +89,8 @@ global {
   global_attention_function='softmax'
   self_attn_type="scaled-dot"
   generator_function="log_softmax"
+
+  #3. test
+  model_selection_strategy='acc'
 }
 

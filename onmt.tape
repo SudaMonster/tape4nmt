@@ -15,19 +15,25 @@ package mosesdecoder :: .versioner=git .repo="https://github.com/moses-smt/moses
 
 # there seems to be a bug in branching, so this is necessary
 task tokenize : mosesdecoder
-  < in=data
-  > out
-  :: lang=(side: src=$src tgt=$tgt)
-  {
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $in | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $out
-  }
+    < in=data
+    > out
+    :: lang=(side: src=$src tgt=$tgt)
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=""
+    {
+        $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $in | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $out
+    }
 
 
 task train_truecaser : mosesdecoder
     < in=$out@tokenize[section:train]
     > out
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=""
     {
-      $mosesdecoder/scripts/recaser/train-truecaser.perl -corpus $in -model $out
+        $mosesdecoder/scripts/recaser/train-truecaser.perl -corpus $in -model $out
     }
 
 
@@ -35,6 +41,9 @@ task truecase : mosesdecoder
     < in=$out@tokenize
     < model=$out@train_truecaser
     > out
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=""
     {
     $mosesdecoder/scripts/recaser/truecase.perl -model $model < $in > $out
     }
@@ -44,6 +53,9 @@ task train_bpe : subword_nmt
     < in=$bpe_input[section:train]
     > out
     :: bpe_operations=@
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=""
     {
       cat $in | $subword_nmt/learn_bpe.py -s $bpe_operations > $out
     }
@@ -53,6 +65,9 @@ task apply_bpe : subword_nmt
     < in=$bpe_input
     < model=$out@train_bpe
     > out 
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=""
     {
       $subword_nmt/apply_bpe.py -c $model < $in > $out
     }
@@ -66,6 +81,9 @@ task clean_corpus : mosesdecoder
     :: tgt=@
     :: clean_minlen=@
     :: clean_maxlen=@
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=""
     {
       
       ln -s $train_src_in train.$src
@@ -86,6 +104,9 @@ task binarize_data : onmt mosesdecoder
     :: python_env=@
     :: src=@
     :: tgt=@
+    :: .submitter=$submitter
+    :: .resource_flags=$cpu_resource_flags 
+    :: .action_flags=$action_flags
     {
       source activate $python_env
       
@@ -112,6 +133,7 @@ task binarize_data : onmt mosesdecoder
 task train : onmt
     < in=$out@binarize_data
     > out
+    > train_log
     :: python_env=@
     :: save_checkpoint_steps=@
     :: keep_checkpoint=@
@@ -150,215 +172,176 @@ task train : onmt
     :: global_attention_function=@
     :: self_attn_type=@
     :: generator_function=@
+    :: .submitter=$submitter
+    :: .resource_flags=$gpu_resource_flags 
+    :: .action_flags=$action_flags
     {
         source activate $python_env
       
-        cmd="python -u $onmt/train.py 
-            -data $in 
-            -save_model $out 
-            -save_checkpoint_steps ${save_checkpoint_steps} 
-            -keep_checkpoint ${keep_checkpoint} 
-            -seed ${seed} 
-            -param_init ${param_init} 
-            -batch_size ${batch_size} 
-            -batch_type ${batch_type} 
-            -normalization ${normalization} 
-            -valid_steps ${valid_steps} 
-            -valid_batch_size ${valid_batch_size} 
-            -max_generator_batches ${max_generator_batches} 
-            -train_steps ${train_steps} 
-            -optim ${optim} 
-            -max_grad_norm ${max_grad_norm} 
-            -dropout ${dropout} 
-            -adam_beta1 ${adam_beta1} 
-            -adam_beta2 ${adam_beta2} 
-            -label_smoothing ${label_smoothing} 
-            -learning_rate ${learning_rate} 
-            -learning_rate_decay ${learning_rate_decay} 
-            -start_decay_steps ${start_decay_steps} 
-            -decay_steps ${decay_steps} 
-            -report_every ${report_every}
-            -src_word_vec_size ${src_word_vec_size} 
-            -tgt_word_vec_size ${tgt_word_vec_size} 
-            -feat_merge ${feat_merge} 
-            -feat_vec_size ${feat_vec_size} 
-            -feat_vec_exponent ${feat_vec_exponent} 
-            -encoder_type ${encoder_type} 
-            -decoder_type ${decoder_type} 
-            -enc_layers ${enc_layers} 
-            -dec_layers ${dec_layers} 
-            -rnn_size ${rnn_size} 
-            -rnn_type ${rnn_type} 
-            -global_attention ${global_attention}
-            -global_attention_function ${global_attention_function} 
-            -self_attn_type ${self_attn_type} 
-            -generator_function ${generator_function}"
+        cmd="python -u $onmt/train.py "
+        cmd="$cmd -data $in "
+        cmd="$cmd -save_model $out "
+        cmd="$cmd -save_checkpoint_steps ${save_checkpoint_steps} "
+        cmd="$cmd -keep_checkpoint ${keep_checkpoint} "
+        cmd="$cmd -seed ${seed} "
+        cmd="$cmd -gpuid 0"
+        cmd="$cmd -param_init ${param_init} "
+        cmd="$cmd -batch_size ${batch_size} "
+        cmd="$cmd -batch_type ${batch_type} "
+        cmd="$cmd -normalization ${normalization} "
+        cmd="$cmd -valid_steps ${valid_steps} "
+        cmd="$cmd -valid_batch_size ${valid_batch_size} "
+        cmd="$cmd -max_generator_batches ${max_generator_batches} "
+        cmd="$cmd -train_steps ${train_steps} "
+        cmd="$cmd -optim ${optim} "
+        cmd="$cmd -max_grad_norm ${max_grad_norm} "
+        cmd="$cmd -dropout ${dropout} "
+        cmd="$cmd -adam_beta1 ${adam_beta1} "
+        cmd="$cmd -adam_beta2 ${adam_beta2} "
+        cmd="$cmd -label_smoothing ${label_smoothing} "
+        cmd="$cmd -learning_rate ${learning_rate} "
+        cmd="$cmd -learning_rate_decay ${learning_rate_decay} "
+        cmd="$cmd -start_decay_steps ${start_decay_steps} "
+        cmd="$cmd -decay_steps ${decay_steps} "
+        cmd="$cmd -report_every ${report_every}"
+        cmd="$cmd -src_word_vec_size ${src_word_vec_size} "
+        cmd="$cmd -tgt_word_vec_size ${tgt_word_vec_size} "
+        cmd="$cmd -feat_merge ${feat_merge} "
+        cmd="$cmd -feat_vec_size ${feat_vec_size} "
+        cmd="$cmd -feat_vec_exponent ${feat_vec_exponent} "
+        cmd="$cmd -encoder_type ${encoder_type} "
+        cmd="$cmd -decoder_type ${decoder_type} "
+        cmd="$cmd -enc_layers ${enc_layers} "
+        cmd="$cmd -dec_layers ${dec_layers} "
+        cmd="$cmd -rnn_size ${rnn_size} "
+        cmd="$cmd -rnn_type ${rnn_type} "
+        cmd="$cmd -global_attention ${global_attention}"
+        cmd="$cmd -global_attention_function ${global_attention_function} "
+        cmd="$cmd -self_attn_type ${self_attn_type} "
+        cmd="$cmd -generator_function ${generator_function}"
             
         echo $cmd
         CUDA_VISIBLE_DEVICES=`free-gpu` eval $cmd
 
         models=`ls ${out}_* 2>/dev/null`
-        if [ ! -z "$models" ] ; then
+        if [ ! -z "$models" ]
+        then
           touch $out # cheat
+        fi
+
+
+        if [ -e qsub.stderr]
+        then
+          ln -s qsub.stderr $train_log
         fi
     }
 
-# task model_selection
-#     < in=$out@train
-#     > out
-#     :: test_model_selection_strategy=@ {
-#
-#   touch list
-#   for dump in `ls ${in}_*`; do
-#     echo $dump
-#     acc=`basename $dump | grep -Eo "acc_[0-9\.]+" | grep -Eo "[0-9\.]+"`
-#     ppl=`basename $dump | grep -Eo "ppl_[0-9\.]+" | grep -Eo "[0-9\.]+"`
-#     epc=`basename $dump | grep -Eo "e[0-9]+" | grep -Eo "[0-9]+"`
-#     if [ "$test_model_selection_strategy" == "acc" ] ; then
-#       echo $acc >> list
-#     fi
-#     if [ "$test_model_selection_strategy" == "ppl" ] ; then
-#       echo $ppl >> list
-#     fi
-#   done
-#
-#
-#   if [ "$test_model_selection_strategy" == "acc" ] ; then
-#     best_crit=`sort -g list | tail -1`
-#     echo $best_crit
-#     best=`ls ${in}_* | grep acc_${best_crit} | tail -1`
-#   fi
-#   if [ "$test_model_selection_strategy" == "ppl" ] ; then
-#     best_crit=`sort -g list | head -1`
-#     echo $best_crit
-#     best=`ls ${in}_* | grep ppl_${best_crit} | tail -1`
-#   fi
-#
-#   if [ ! -z $best ] ; then
-#     echo "$best is selected as the best model according to strategy: $test_model_selection_strategy"
-#     cp $best $out
-#   else
-#     echo "unsupported strategy $test_model_selection_strategy detected"
-#   fi
-#
-#   rm list
-# }
+task model_selection
+     < in=$train_log@train
+     < modelprefix=$out@train
+     > best_model
+     :: model_selection_strategy=@ 
+     {
+        ls ${modelprefix}_* -1v > model_list
+        cat $in | grep "Validation acc" | cut -d ' ' -f6 > acc_list
+        cat $in | grep "Validation per" | cut -d ' ' -f6 > ppl_list
+        paste model_list acc_list ppl_list > all_info
+        if [ "$model_selection_strategy" = "acc" ]
+        then
+            best=`cat all_info | sort -rn -k2 |head -n 1| sed 's/pt.*/pt/'`
+        elif [ "$model_selection_strategy" = "ppl" ] ; then
+            best=`cat all_info | sort -n -k3 |head -n 1| sed 's/pt.*/pt/'`
+        fi
+        ln -s $best $best_model
+        
+      }
 
-# the target input here is used to compute naïve acc and ppl,
-# that's why we need post-bpe target input
-#task decode : fairseq
-#    # < src_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:test,side:src]
-#    # < trg_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:test,side:trg]
-#    < in=$out@binarize_data
-#    < model=$out@train
+task translate : onmt mosesdecoder
+      < src=$out@apply_bpe[side:src]
+      < tgt=$out@apply_bpe[side:tgt]
+      < model=$best_model@model_selection
+      > out
+      > bleu_scores
+      :: section=(section: train='train' dev='dev' test='test')
+      :: python_env=@
+      :: .submitter=$submitter
+      :: .action_flags=$action_flags
+      :: .resource_flags=$gpu_resource_flags
+
+      {
+          if [ "$section" = "train" ]
+          then
+              echo "did nothing on train" >  out
+              echo "did nothing on train" >  bleu_scores
+              exit 0
+          fi
+          
+          model_name=`basename ${model}`
+          
+          hostname
+          GPU=`free-gpu`
+          echo "Using GPU $GPU"
+          source activate $python_env
+          CUDA_VISIBLE_DEVICES=$GPU python ${onmt}/translate.py \
+              -gpu 0 \
+              -model ${model} \
+              -src ${src} \
+              -beam_size 12 \
+              -replace_unk \
+              -output ${out}.bpe
+
+          sed -r 's/\@\@ //g' < ${out}.bpe > ${out}.true
+          sed -r 's/\@\@ //g' < ${tgt} > ref.true
+
+          # detruecase
+          ${mosesdecoder}/scripts/recaser/detruecase.perl < ${out}.true > ${out}.tok
+          ${mosesdecoder}/scripts/recaser/detruecase.perl < ref.true > ref.tok
+
+          # detokenize
+          ${mosesdecoder}/scripts/tokenizer/detokenizer.perl < ${out}.tok > ${out}
+          ${mosesdecoder}/scripts/tokenizer/detokenizer.perl < ref.tok > ref.detok
+
+          # get BLEU
+          blue_detail=`/home/pkoehn/moses/scripts/generic/multi-bleu-detok.perl ref.detok < ${out}`
+          BLEU=`echo ${blue_detail}| cut -f 3 -d ' ' | cut -f 1 -d ','`
+          echo `date`"$section ${model_name}: ${blue_detail}" >> $bleu_scores
+        echo "BLEU = $BLEU"
+      }
+
+#task translate_dev calls translate 
+#    < src=$out@apply_bpe[section:dev,side:src]
+#    < tgt=$out@apply_bpe[section:dev,side:tgt]
+#    < model=$best_model@model_selection
 #    > out
-#    :: test_max_sent_length=@
-#    :: test_beam_size=@
-#    :: test_batch_size=@
-#    # :: test_replace_unk=@
-#    :: test_remove_bpe=@
+#    > bleu_scores
+#    :: python_env=@
 #    :: .submitter=$submitter
-#    :: .action_flags="-m ae -M xutai_ma@jhu.edu -q g.q"
-#    :: .resource_flags="-l 'hostname=b1[23456789]|c*,gpu=1,mem_free=4g,ram_free=4g'"
-#    :: conda_env=@ {
-#
-#  # . /export/home/sding/anaconda3/etc/profile.d/conda.sh  # start conda
-#
-#  conda activate $conda_env
-#  refn=`ls $trg_in* | wc -l`
-#
-#  # if [ $refn -eq 1 ]; then
-#  #   cmd="python $fairseq/translate.py -gpu $device -model $model -src $src_in -tgt $trg_in -replace_unk -verbose -output $out -batch_size 1 -beam_size 12"
-#    # cmd="python $fairseq/translate.py -gpu $device -model $model -src $src_in -verbose -output $out -batch_size $test_batch_size -beam_size $test_beam_size -max_sent_length $test_max_sent_length"
-#  # else
-#  #   cmd="python $fairseq/translate.py -gpu $device -model $model -src $src_in -tgt $trg_in0 -replace_unk -verbose -output $out -batch_size 1 -beam_size 12"
-#    # cmd="python $fairseq/translate.py -gpu $device -model $model -src $src_in -verbose -output $out -batch_size $test_batch_size -beam_size $test_beam_size -max_sent_length $test_max_sent_length"
-#  # fi
-#
-#  # if [ ! -z $test_replace_unk ]; then
-#  #   cmd=$cmd" -replace_unk"
-#  # fi
-#
-#  cmd="python $fairseq/generate.py $in --path $model/checkpoint_best.pt --batch-size $test_batch_size --beam $test_beam_size"
-#
-#  if [ ! -z $test_remove_bpe ] ; then
-#    cmd=$cmd" --remove-bpe"
-#  fi
-#
-#  echo $cmd
-#  CUDA_VISIBLE_DEVICES=`free-gpu` $cmd > decode.log
-#  cat decode.log | grep ^H | cut -f3- > $out
-#}
-#
-#task debpe
-#    < in=$out@decode
+#    :: .action_flags=action_flags
+#    :: .resource_flags=gpu_resource_flags
+
+
+#task translate_test calls translate 
+#    < src=$out@apply_bpe[section:test,side:src]
+#    < tgt=$out@apply_bpe[section:test,side:tgt]
+#    < model=$best_model@model_selection
 #    > out
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
-#
-#  cat $in | sed -r 's/\@\@ //g' > $out
-#}
-#
-#task detruecase : mosesdecoder
-#    < in=$out@debpe
+#    > bleu_scores
+#    :: python_env=@
+#    :: .submitter=$submitter
+#    :: .action_flags=action_flags
+#    :: .resource_flags=gpu_resource_flags
+
+#task report_scores
+#    < in=(DecodeSection: dev=$bleu_scores@translate_dev test=$bleu_scores@translate_test)
 #    > out
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
-#
-#  $mosesdecoder/scripts/recaser/detruecase.perl < $in > $out
-#}
-#
-#task detokenize : mosesdecoder
-#    < in=$out@detruecase
-#    > out
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
-#
-#  $mosesdecoder/scripts/tokenizer/detokenizer.perl < $in > $out
-#}
-#
-#task wrap_xml : mosesdecoder
-#    < in=$out@detokenize
-#    < wrap_template=$out@aggregate[DevtestDataSection:test,side:src]
-#    > out
-#    :: trg_lang=@
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
-#
-#  $mosesdecoder/scripts/ems/support/wrap-xml.perl $trg_lang $wrap_template < $in > $out
-#}
-#
-#task nist_bleu : mosesdecoder
-#    < in=$out@wrap_xml
-#    < wrap_template=$out@aggregate[DevtestDataSection:test,side:src]
-#    < ref=$out@aggregate[DataSection:devtest,DevtestDataSection:test,side:trg]
-#    > bleu
-#    > bleu_c
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
-#
-#
-#  $mosesdecoder/scripts/generic/mteval-v13a.pl -s $wrap_template -r $ref -t $in > $bleu
-#  $mosesdecoder/scripts/generic/mteval-v13a.pl -c -s $wrap_template -r $ref -t $in > $bleu_c
-#}
-#
-#task multi_bleu : mosesdecoder
-#    < in=$out@detokenize
-#    < ref=$tokenized_trg
-#    > bleu
-#    > bleu_c
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
-#
-#  refn=`ls $ref* | wc -l`
-#  if [ $refn -gt 1 ] ; then
-#    mv $ref ${ref}.tmp # get rid of dummy single reference
-#  fi
-#
-#  $mosesdecoder/scripts/generic/multi-bleu-detok.perl $ref < $in > $bleu_c
-#  $mosesdecoder/scripts/generic/multi-bleu-detok.perl -lc $ref < $in > $bleu
-#
-#  if [ $refn -gt 1 ] ; then
-#    mv ${ref}.tmp $ref
-#  fi
-#}
-#
-# COMMANDS: the bash commands from some task
-# TASK, REALIZATION, CONFIGURATION: variables passed by ducttape
+#    {
+#      ln -s $in $out
+#    }
+
+plan test {
+  reach translate via (section: *) * (side: *) * (NumberOfBPE: 40000) * (RunTasksBeforeBPE: no)
+}
+
 submitter sge :: action_flags
               :: COMMANDS
               :: TASK REALIZATION TASK_VARIABLES CONFIGURATION {
@@ -366,27 +349,15 @@ submitter sge :: action_flags
     wrapper="ducttape_job.sh"
     echo "#$ $resource_flags" >> $wrapper
     echo "#$ $action_flags" >> $wrapper
-    echo "#$ -j y" >> $wrapper
+    echo "#$ -o localhost:$PWD/qsub.stdout" >> $wrapper
+    echo "#$ -e localhost:$PWD/qsub.stderr" >> $wrapper
     echo "#$ -V" >> $wrapper
     echo "#$ -S /bin/zsh" >> $wrapper
-    echo "#$ -o localhost:$PWD/job.out" >> $wrapper
     echo "#$ -N $CONFIGURATION-$TASK-$REALIZATION" >> $wrapper
+    echo "set -e # stop on errors" >> $wrapper
 
-    # Bash flags aren't necessarily passed into the scheduler
-    # so we must re-initialize them
-
-    # these two doesn't work well with virtualenv ...
-    # echo "set -e # stop on errors" >> $wrapper
-    # echo "set -u # stop on undeclared variables" >> $wrapper
-
-
-    echo "set -o pipefail # stop on pipeline errors" >> $wrapper
-    echo "set -x # show each command as it is executed" >> $wrapper
     echo "$TASK_VARIABLES" | grep -v "resource_flags" | grep -v "action_flags" >> $wrapper
-
-    # The current working directory will also be changed by most schedulers
     echo "cd $PWD" >> $wrapper
-
     echo "$COMMANDS" >> $wrapper
 
     # Use SGE's -sync option to prevent qsub from immediately returning
@@ -408,9 +379,6 @@ versioner git :: repo ref {
   }
 }
 
-plan test {
-  reach train via (section: *) * (side: *) * (NumberOfBPE: 2000) * (RunTasksBeforeBPE: no)
-}
 
 # Nuts and bolts:
 global {
