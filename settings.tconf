@@ -1,22 +1,11 @@
 global {
 
-  # GLOBAL/PREPROCESSING CONFIGURATIONS
-  working_dir="/export/b18/shuoyangd/projects/fairseq-test/exps"
-
+  # 0. basic settings
+  # 0.0 language
   src=so
   tgt=en
-  tgt_lang=en
-  Ratio=1
-  MaxLen=80
 
-
-  njobs=50
-  submitter="sge"
-  resource_flags="-l 'mem_free=2g,ram_free=2g'"
-  action_flags="-m ae -M xutai_ma@jhu.edu"
-  #pyenv="/home/shuoyangd/pyenv/py3t4/bin/activate"
-  conda_env="mxnet_v1.2.1"
-
+  # 0.1 data path
   train_data=(side:
       src="/home/pkoehn/experiment/material-so-en/training/corpus.1.so"
       tgt="/home/pkoehn/experiment/material-so-en/training/corpus.1.en"
@@ -30,65 +19,77 @@ global {
       src="/home/pkoehn/experiment/material-so-en/evaluation/analysis.input.tc.1"
       tgt="/home/pkoehn/experiment/material-so-en/evaluation/analysis.reference.tok.1"
     )
+  # 0.2 submitter info
+  submitter="sge"
+  cpu_resource_flags="-l 'mem_free=8g,ram_free=8g'"
+  gpu_resource_flags="-l 'hostname=b1[123456789]|c*,gpu=1,mem_free=8g,ram_free=8g'"
+  action_flags="-m ae -M xutai_ma@jhu.edu"
 
-  src_truecaser=(UseExistingTruecaser:
-    yes=""
-    no=$out@train_truecaser
-  )
-  tgt_truecaser=(UseExistingTruecaser:
-    yes=""
-    no=$out@train_truecaser
-  )
+  # 0.4 environmental variables
+  python_env="pytorch-v0.4.1-p36-cu80"
 
-  tokenized_tgt=(DoTokenize:
-    yes=$out@tgt_tokenize
-    no=$out@aggregate[side:tgt]
-  )
-
-  bpe_input=(DoTokenizeAndTruecase:
-    yes=$out@truecase
-    no=$out@aggregate
-  )
-
-  sgm_dev=""
-  sgm_test=""
-
-  multi_bleu="true"
-  nist_bleu="true"
-  
+  # 1. preprocess
+  # 1.1 bpe
   bpe_operations=(NumberOfBPE: 2000 5000 10000 20000 40000)
+  train_bpe_input=(RunTasksBeforeBPE:
+    yes=$out@truecase
+    no=$train_data
+  )
+  apply_bpe_input=(RunTasksBeforeBPE:
+    yes=$out@truecase
+    no=(Split: train=$train_data dev=$dev_data test=$test_data)
+  )
+  # 1.2 clean
+  clean_minlen=1
+  clean_maxlen=100
 
-  # TRAINING CONFIGURATIONS
-  # all default is consistent with nematus
-  train_train_from="" # if there is a previous model to start with
-  train_train_from_state_dict="" # if there is a previous dict to start with
-  train_start_epoch="" # if trained for certain amount of epochs previously
+  #2. Training
 
-  train_batch_size="80"
-  train_optim="adam"
-  train_dropout="0.1"
-  train_lr="0.0005"
-  train_lr_min="1e-09"
-  train_lr_shrink="0.5"
-  train_lr_scheduler="inverse_sqrt"
-  train_warmup_init_lr="1e-07"
-  train_warmup_updates="0"
-  # train_warmup_updates="4000"
-  train_criterion="label_smoothed_cross_entropy"
-  train_label_smoothing="0.1"
-  train_clip_norm=(ClipNorm: 0.0 0.1 0.5 1 5)
-  train_max_tokens="4000"
-  train_arch=(Architecture: conv="fconv" transformer="transformer" fconv_iwslt_de_en="fconv_iwslt_de_en" transformer_iwslt_de_en="transformer_iwslt_de_en")
-  train_share_all_embeddings="True"
-  train_adam_beta1="0.9"
-  train_adam_beta2="0.98"
+  #2.1 training paths
+  save_checkpoint_steps=2000
+  keep_checkpoint=-1
+  gpuid=0
+  seed=1234
+  param_init=0.1
+  train_from=""
+  pre_word_vecs_enc=""
+  pre_word_vecs_dec=""
 
-  # TEST CONFIGURATIONS
-  test_model_selection_strategy="acc"
-  test_max_sent_length="300"
-  test_beam_size="12"
-  test_batch_size="32"
-  test_replace_unk="True"
-  test_remove_bpe=""
+  #2.2 training optimization
+  batch_size=64
+  batch_type='sents'
+  normalization='sents'
+  valid_steps=2000
+  valid_batch_size=64
+  max_generator_batches=32
+  train_steps=40000
+  optim='adam'
+  max_grad_norm=5
+  dropout=0.3
+  adam_beta1=0.9
+  adam_beta2=0.999
+  label_smoothing=0.0
+  learning_rate=0.001
+  learning_rate_decay=0.8
+  start_decay_steps=10000
+  decay_steps=2000
+  #2.3 log
+  report_every=100
+  #2.4 seq2seq model
+  src_word_vec_size=512
+  tgt_word_vec_size=512
+  feat_merge='concat'
+  feat_vec_size=-1
+  feat_vec_exponent=0.7
+  encoder_type='rnn'
+  decoder_type='rnn'
+  enc_layers=2
+  dec_layers=2
+  rnn_size=512
+  rnn_type='LSTM'
+  global_attention='general'
+  global_attention_function='softmax'
+  self_attn_type="scaled-dot"
+  generator_function="log_softmax"
 }
 

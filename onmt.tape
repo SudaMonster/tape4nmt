@@ -14,256 +14,238 @@ package mosesdecoder :: .versioner=git .repo="https://github.com/moses-smt/moses
 }
 
 # there seems to be a bug in branching, so this is necessary
-task aggregate
-    < in=(Split: train=$train_data dev=$dev_data test=$test_data)
-    > out {
-      ln -s $in $out
-}
-
-task src_tokenize : mosesdecoder
-  < train_data=$out@aggregate[Split:train,side:src]
-  < dev_data=$out@aggregate[Split:dev,side:src]
-  < test_data=$out@aggregate[Split:test,side:src]
-  > train_out
-  > dev_out
-  > test_out
-  :: lang=$src
+task tokenize : mosesdecoder
+  < in=(Split: train=$train_data dev=$dev_data test=$test_data)
+  > out
+  :: lang=(side: src=$src tgt=$tgt)
   {
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $train_data | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $train_out
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $dev_data | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $dev_out
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $test_data | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $test_out
-  }
-
-task tgt_tokenize : mosesdecoder
-  < train_data=$out@aggregate[Split:train,side:tgt]
-  < dev_data=$out@aggregate[Split:dev,side:tgt]
-  < test_data=$out@aggregate[Split:test,side:tgt]
-  > train_out
-  > dev_out
-  > test_out
-  :: lang=$tgt
-  {
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $train_data | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $train_out
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $dev_data | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $dev_out
-      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $test_data | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $test_out
+      $mosesdecoder/scripts/tokenizer/normalize-punctuation.perl -l $lang < $in | $mosesdecoder/scripts/tokenizer/tokenizer.perl -a -l $lang > $out
   }
 
 
-#    > out
-#    :: Lang=$TRG
-#    :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags
-#
 task train_truecaser : mosesdecoder
-    < in=(side: src=$train_out@src_tokenize tgt=$train_out@tgt_tokenize)
+    < in=$out@tokenize[Split:train]
     > out
     {
       $mosesdecoder/scripts/recaser/train-truecaser.perl -corpus $in -model $out
     }
 
+
 task truecase : mosesdecoder
-    < in=(Split: train=(side: src=$train_out@src_tokenize 
-                              tgt=$train_out@tgt_tokenize) 
-                 dev=(side: src=$dev_out@src_tokenize 
-                              tgt=$dev_out@tgt_tokenize) 
-                 test=(side: src=$train_out@src_tokenize 
-                              tgt=$train_out@tgt_tokenize) 
-                 )
-    < model=(side: src=$out@train_truecaser[side:src] tgt=$out@train_truecaser[side:tgt])
+    < in=$out@tokenize
+    < model=$out@train_truecaser
     > out
     {
     $mosesdecoder/scripts/recaser/truecase.perl -model $model < $in > $out
-  }
+    }
+
+
+task train_bpe : subword_nmt
+    < in=$train_bpe_input
+    > out
+    :: bpe_operations=@
+    {
+      cat $in | $subword_nmt/learn_bpe.py -s $bpe_operations > $out
+    }
+
+
+task apply_bpe : subword_nmt
+    < in=$apply_bpe_input
+    < model=$out@train_bpe
+    > out 
+    {
+      $subword_nmt/apply_bpe.py -c $model < $in > $out
+    }
+
+task clean_corpus : mosesdecoder
+    < train_src_in=$out@apply_bpe[Split:train,side:src]
+    < train_tgt_in=$out@apply_bpe[Split:train,side:tgt]
+    > train_src_out
+    > train_tgt_out
+    :: src=@
+    :: tgt=@
+    :: clean_minlen=@
+    :: clean_maxlen=@
+    {
+      
+      ln -s $train_src_in train.$src
+      ln -s $train_tgt_in train.$tgt
+      $mosesdecoder/scripts/training/clean-corpus-n.perl ./train $src $tgt ./train.clean $clean_minlen $clean_maxlen
+      ln -s ./train.clean.$src $train_src_out
+      ln -s ./train.clean.$tgt $train_tgt_out
+    }
+
+task binarize_data : onmt mosesdecoder
+    < train_src_in=$train_src_out@clean_corpus
+    < train_tgt_in=$train_tgt_out@clean_corpus
+    < dev_src_in=$out@apply_bpe[Split:dev,side:src]
+    < dev_tgt_in=$out@apply_bpe[Split:dev,side:tgt]
+    < test_src_in=$out@apply_bpe[Split:test,side:src]
+    < test_tgt_in=$out@apply_bpe[Split:test,side:tgt]
+    > out
+    :: python_env=@
+    :: src=@
+    :: tgt=@
+    {
+      source activate $python_env
+      
+      ln -s $train_src_in train.bpe.$src
+      ln -s $train_tgt_in train.bpe.$tgt
+      ln -s $dev_src_in dev.bpe.$src
+      ln -s $dev_tgt_in dev.bpe.$tgt
+      ln -s $test_src_in test.bpe.$src
+      ln -s $test_tgt_in test.bpe.$tgt
+
+
+      python $onmt/preprocess.py \
+        -train_src train.bpe.$src \
+        -train_tgt train.bpe.$tgt \
+        -valid_src dev.bpe.$src \
+        -valid_tgt dev.bpe.$tgt \
+        -save_data $out
+
+      if [ -f ${out}.train.1.pt ] ; then
+        touch $out
+      fi
+    }
 #
-#task train_bpe : subword_nmt
-#      < src_in=$bpe_input[DataSection:train,side:src]
-#      < trg_in=$bpe_input[DataSection:train,side:trg]
-#      > out
-#      :: bpe_operations=@
-#      :: SRC=@
-#      :: TRG=@
-#      :: .submitter=$submitter .action_flags=$action_flags .resource_flags=$resource_flags {
+task train : onmt
+    < in=$out@binarize_data
+    > out
+    :: python_env=@
+    :: save_checkpoint_steps=@
+    :: keep_checkpoint=@
+    :: seed=@
+    :: param_init=@
+    :: batch_size=@
+    :: batch_type=@
+    :: normalization=@
+    :: valid_steps=@
+    :: valid_batch_size=@
+    :: max_generator_batches=@
+    :: train_steps=@
+    :: optim=@
+    :: max_grad_norm=@
+    :: dropout=@
+    :: adam_beta1=@
+    :: adam_beta2=@
+    :: label_smoothing=@
+    :: learning_rate=@
+    :: learning_rate_decay=@
+    :: start_decay_steps=@
+    :: decay_steps=@
+    :: report_every=@
+    :: src_word_vec_size=@
+    :: tgt_word_vec_size=@
+    :: feat_merge=@
+    :: feat_vec_size=@
+    :: feat_vec_exponent=@
+    :: encoder_type=@
+    :: decoder_type=@
+    :: enc_layers=@
+    :: dec_layers=@
+    :: rnn_size=@
+    :: rnn_type=@
+    :: global_attention=@
+    :: global_attention_function=@
+    :: self_attn_type=@
+    :: generator_function=@
+    {
+        source activate $python_env
+      
+        cmd="python -u $onmt/train.py 
+            -data $in 
+            -save_model $out 
+            -save_checkpoint_steps ${save_checkpoint_steps} 
+            -keep_checkpoint ${keep_checkpoint} 
+            -seed ${seed} 
+            -param_init ${param_init} 
+            -batch_size ${batch_size} 
+            -batch_type ${batch_type} 
+            -normalization ${normalization} 
+            -valid_steps ${valid_steps} 
+            -valid_batch_size ${valid_batch_size} 
+            -max_generator_batches ${max_generator_batches} 
+            -train_steps ${train_steps} 
+            -optim ${optim} 
+            -max_grad_norm ${max_grad_norm} 
+            -dropout ${dropout} 
+            -adam_beta1 ${adam_beta1} 
+            -adam_beta2 ${adam_beta2} 
+            -label_smoothing ${label_smoothing} 
+            -learning_rate ${learning_rate} 
+            -learning_rate_decay ${learning_rate_decay} 
+            -start_decay_steps ${start_decay_steps} 
+            -decay_steps ${decay_steps} 
+            -report_every ${report_every}
+            -src_word_vec_size ${src_word_vec_size} 
+            -tgt_word_vec_size ${tgt_word_vec_size} 
+            -feat_merge ${feat_merge} 
+            -feat_vec_size ${feat_vec_size} 
+            -feat_vec_exponent ${feat_vec_exponent} 
+            -encoder_type ${encoder_type} 
+            -decoder_type ${decoder_type} 
+            -enc_layers ${enc_layers} 
+            -dec_layers ${dec_layers} 
+            -rnn_size ${rnn_size} 
+            -rnn_type ${rnn_type} 
+            -global_attention ${global_attention}
+            -global_attention_function ${global_attention_function} 
+            -self_attn_type ${self_attn_type} 
+            -generator_function ${generator_function}"
+            
+        echo $cmd
+        CUDA_VISIBLE_DEVICES=`free-gpu` eval $cmd
+
+        models=`ls ${out}_* 2>/dev/null`
+        if [ ! -z "$models" ] ; then
+          touch $out # cheat
+        fi
+    }
+
+# task model_selection
+#     < in=$out@train
+#     > out
+#     :: test_model_selection_strategy=@ {
 #
-#  cat $src_in $trg_in | $subword_nmt/learn_bpe.py -s $bpe_operations > $out
-#}
-#
-#task apply_bpe : subword_nmt
-#    # < in=(DataSection:train=$out@merge devtest=(DevtestDataSection: dev=$out@merge_dev test=$out@truecase[DataSection:devtest,DevtestDataSection:test]))
-#    < in=$bpe_input
-#    < model=$out@train_bpe
-#    > out {
-#
-#  $subword_nmt/apply_bpe.py -c $model < $in > $out
-#}
-#
-#task binarize_data : fairseq
-#    < train_src_in=$out@apply_bpe[DataSection:train,side:src]
-#    < train_trg_in=$out@apply_bpe[DataSection:train,side:trg]
-#    < dev_src_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:dev,side:src]
-#    < dev_trg_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:dev,side:trg]
-#    < test_src_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:test,side:src]
-#    < test_trg_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:test,side:trg]
-#    > out
-#    :: conda_env=@
-#    # :: train_max_shard_size=@
-#    :: SRC=@
-#    :: TRG=@
-#    :: .submitter=$submitter
-#    :: .resource_flags="-l 'mem_free=16g,ram_free=16g'"
-#    :: .action_flags="-m ae -M xutai_ma@jhu.edu" {
+#   touch list
+#   for dump in `ls ${in}_*`; do
+#     echo $dump
+#     acc=`basename $dump | grep -Eo "acc_[0-9\.]+" | grep -Eo "[0-9\.]+"`
+#     ppl=`basename $dump | grep -Eo "ppl_[0-9\.]+" | grep -Eo "[0-9\.]+"`
+#     epc=`basename $dump | grep -Eo "e[0-9]+" | grep -Eo "[0-9]+"`
+#     if [ "$test_model_selection_strategy" == "acc" ] ; then
+#       echo $acc >> list
+#     fi
+#     if [ "$test_model_selection_strategy" == "ppl" ] ; then
+#       echo $ppl >> list
+#     fi
+#   done
 #
 #
-#  source activate $conda_env
+#   if [ "$test_model_selection_strategy" == "acc" ] ; then
+#     best_crit=`sort -g list | tail -1`
+#     echo $best_crit
+#     best=`ls ${in}_* | grep acc_${best_crit} | tail -1`
+#   fi
+#   if [ "$test_model_selection_strategy" == "ppl" ] ; then
+#     best_crit=`sort -g list | head -1`
+#     echo $best_crit
+#     best=`ls ${in}_* | grep ppl_${best_crit} | tail -1`
+#   fi
 #
-#  ln -s $train_src_in train.$SRC
-#  ln -s $train_trg_in train.$TRG
-#  ln -s $dev_src_in dev.$SRC
-#  ln -s $dev_trg_in dev.$TRG
-#  ln -s $test_src_in test.$SRC
-#  ln -s $test_trg_in test.$TRG
+#   if [ ! -z $best ] ; then
+#     echo "$best is selected as the best model according to strategy: $test_model_selection_strategy"
+#     cp $best $out
+#   else
+#     echo "unsupported strategy $test_model_selection_strategy detected"
+#   fi
 #
-#  python $fairseq/preprocess.py --source-lang $SRC --target-lang $TRG \
-#    --trainpref train --validpref dev --testpref test \
-#    --destdir $out
-#
-#  if [ -f ${out}.train.1.pt ] ; then
-#    touch $out
-#  fi
-#}
-#
-#task train : fairseq
-#    < in=$out@binarize_data
-#    > out
-#    :: conda_env=@
-#    :: train_batch_size=@
-#    :: train_optim=@
-#    :: train_dropout=@
-#    :: train_adam_beta1=@
-#    :: train_adam_beta2=@
-#    :: train_lr=@
-#    :: train_lr_min=@
-#    :: train_lr_shrink=@
-#    :: train_lr_scheduler=@
-#    :: train_warmup_init_lr=@
-#    :: train_warmup_updates=@
-#    :: train_criterion=@
-#    :: train_label_smoothing=@
-#    :: train_clip_norm=@
-#    :: train_max_tokens=@
-#    # :: train_encoder_type=@
-#    :: train_arch=@
-#    :: .submitter=$submitter
-#    :: .resource_flags="-l 'hostname=b1[23456789]|c*,gpu=1,mem_free=4g,ram_free=4g'"
-#    :: .action_flags="-m bae -M xutai_ma@jhu.edu -q g.q" {
-#
-#  sleep `od -An -N1 -i /dev/random` # avoid GPU clash
-#
-#  source activate $conda_env
-#  export device=`free-gpu`
-#  echo "gpu$device at "`hostname`
-#  if [ -z $device ] ; then
-#    echo "no device! grid cheaaaaaaaaaatin!"
-#    exit;
-#  fi
-#
-#  cmd="python $fairseq/train.py $in --save-dir $out"
-#  cmd=$cmd" --lr $train_lr --clip-norm $train_clip_norm --dropout $train_dropout --max-tokens $train_max_tokens --arch $train_arch"
-#
-#  if [ ! -z $train_optim ] ; then
-#    cmd=$cmd" --optimizer $train_optim"
-#  fi
-#
-#  if [ ! -z $train_lr_min ] ; then
-#    cmd=$cmd" --min-lr $train_lr_min"
-#  fi
-#
-#  if [ ! -z $train_lr_shrink ] ; then
-#    cmd=$cmd" --lr-shrink $train_lr_shrink"
-#  fi
-#
-#  if [ ! -z $train_lr_scheduler ] ; then
-#    cmd=$cmd" --lr-scheduler $train_lr_scheduler"
-#  fi
-#
-#  if [ ! -z $train_warmup_init_lr ] ; then
-#    cmd=$cmd" --warmup-init-lr $train_warmup_init_lr"
-#  fi
-#
-#  if [ ! -z $train_warmup_updates ] ; then
-#    cmd=$cmd" --warmup-updates $train_warmup_updates"
-#  fi
-#
-#  if [ ! -z $train_criterion ] ; then
-#    cmd=$cmd" --criterion $train_criterion"
-#  fi
-#
-#  if [ ! -z $train_label_smoothing ] ; then
-#    cmd=$cmd" --label-smoothing $train_label_smoothing"
-#  fi
-#
-#  if [ ! -z $train_max_tokens ] ; then
-#    cmd=$cmd" --max-tokens $train_max_tokens"
-#  fi
-#
-#  if [ ! -z $train_adam_betas ] ; then
-#    cmd=$cmd" --adam-betas ($train_adam_beta1, $train_adam_beta2)"
-#  fi
-#
-#  if [ ! -z $train_share_all_embeddings ] ; then
-#    cmd=$cmd" --share-all-embeddings"
-#  fi
-#
-#  echo $cmd
-#  CUDA_VISIBLE_DEVICES=`free-gpu` eval $cmd
-#
-#  # models=`ls ${out}_* 2>/dev/null`
-#  # if [ ! -z "$models" ] ; then
-#  #   touch $out # cheat
-#  # fi
-#}
-#
-## task model_selection
-##     < in=$out@train
-##     > out
-##     :: test_model_selection_strategy=@ {
-##
-##   touch list
-##   for dump in `ls ${in}_*`; do
-##     echo $dump
-##     acc=`basename $dump | grep -Eo "acc_[0-9\.]+" | grep -Eo "[0-9\.]+"`
-##     ppl=`basename $dump | grep -Eo "ppl_[0-9\.]+" | grep -Eo "[0-9\.]+"`
-##     epc=`basename $dump | grep -Eo "e[0-9]+" | grep -Eo "[0-9]+"`
-##     if [ "$test_model_selection_strategy" == "acc" ] ; then
-##       echo $acc >> list
-##     fi
-##     if [ "$test_model_selection_strategy" == "ppl" ] ; then
-##       echo $ppl >> list
-##     fi
-##   done
-##
-##
-##   if [ "$test_model_selection_strategy" == "acc" ] ; then
-##     best_crit=`sort -g list | tail -1`
-##     echo $best_crit
-##     best=`ls ${in}_* | grep acc_${best_crit} | tail -1`
-##   fi
-##   if [ "$test_model_selection_strategy" == "ppl" ] ; then
-##     best_crit=`sort -g list | head -1`
-##     echo $best_crit
-##     best=`ls ${in}_* | grep ppl_${best_crit} | tail -1`
-##   fi
-##
-##   if [ ! -z $best ] ; then
-##     echo "$best is selected as the best model according to strategy: $test_model_selection_strategy"
-##     cp $best $out
-##   else
-##     echo "unsupported strategy $test_model_selection_strategy detected"
-##   fi
-##
-##   rm list
-## }
-#
-## the target input here is used to compute naïve acc and ppl,
-## that's why we need post-bpe target input
+#   rm list
+# }
+
+# the target input here is used to compute naïve acc and ppl,
+# that's why we need post-bpe target input
 #task decode : fairseq
 #    # < src_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:test,side:src]
 #    # < trg_in=$out@apply_bpe[DataSection:devtest,DevtestDataSection:test,side:trg]
@@ -427,11 +409,7 @@ versioner git :: repo ref {
 }
 
 plan test {
-  # reach multi_bleu via (UseExistingTruecaser: no) * (TrainSampleSize: DontSample) * (DataSource: de_en) * (Architecture: fconv transformer) * (ClipNorm: 0.1 1 5)
-  # reach multi_bleu via (UseExistingTruecaser: no) * (TrainSampleSize: DontSample) * (DataSource: de_en) * (Architecture: fconv_iwslt_de_en) * (ClipNorm: 0.1)
-  #reach multi_bleu via (UseExistingTruecaser: no) * (TrainSampleSize: DontSample) * (DataSource: so_en) * (Architecture: fconv_iwslt_de_en transformer_iwslt_de_en) * (NumberOfBPE: *) * (ClipNorm: 5) * (DoTokenizeAndTruecase: no) * (DoTokenize: no)
-  #reach multi_bleu via (UseExistingTruecaser: no) * (TrainSampleSize: DontSample) * (DataSource: so_en) * (Architecture: transformer_iwslt_de_en) * (ClipNorm: 5) * (DoTokenizeAndTruecase: no) * (DoTokenize: no)
-  reach truecase via (Split: *) * (side: *)
+  reach train via (Split: *) * (side: *) * (NumberOfBPE: 2000) * (RunTasksBeforeBPE: no)
 }
 
 # Nuts and bolts:
